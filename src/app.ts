@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { executeSPV2, executeStoredProcedure } from "./data";
+import { executeSPV2, executeStoredProcedure, validatePolicy, validatePlan, validateInsured, validateCoveragesGroup } from "./data";
 import * as sql from 'mssql';
 import * as dotenv from 'dotenv';
 
@@ -25,41 +25,90 @@ const testObject = [
   }
 ]
 
-
 const app = new Hono();
-
 
 app.get('/', (c) => c.text('Hello Azure Functions!'))
 
-// New endpoint for submitting claims
 app.post('/claims', async (c) => {
+  let validationResults;
   try {
-    // Get claim data from request body or use test object
     const claimData = await c.req.json();
     
-    // We'll pass the claims array directly as a TVP
-    const result = await executeSPV2("SMI.USP_InsertClaims", 
-      [{ name: 'Claims_Claimstransactions', type: "TVP", value: Array.isArray(claimData) ? claimData : [claimData] }],
+    const policyNumber = claimData.Claims_PolicyNumber;
+    const serviceDate = claimData.ClaimsTr_ServiceDate;
+    const insured = claimData.Claims_Insured;
+    const planCode = claimData.PlanCode; 
+    const service = parseInt(claimData.ClaimsTr_GCoverage);
+
+    validationResults = {
+      policy: await validatePolicy(policyNumber, serviceDate),
+      plan: planCode ? await validatePlan(policyNumber, serviceDate, planCode) : { success: false, error: 'Plan validation skipped - no plan code provided' },
+      insured: await validateInsured(policyNumber, serviceDate, insured),
+      coverage: (planCode && service) ? 
+        await validateCoveragesGroup(policyNumber, planCode, service, serviceDate) : 
+        { success: false, error: 'Coverage validation skipped - missing plan code or service' }
+    };
+
+    if (!validationResults.policy.success) {
+      return c.json({
+        success: false,
+        message: "Policy validation failed",
+        error: validationResults.policy.error,
+        validationResults
+      }, 400);
+    }
+    
+    if (!validationResults.plan.success) {
+      return c.json({
+        success: false,
+        message: "Plan validation failed",
+        error: validationResults.plan.error,
+        validationResults
+      }, 400);
+    }
+    
+    if (!validationResults.insured.success) {
+      return c.json({
+        success: false,
+        message: "Insured validation failed",
+        error: validationResults.insured.error,
+        validationResults
+      }, 400);
+    }
+
+    if (!validationResults.coverage.success) {
+      return c.json({
+        success: false,
+        message: "Coverage validation failed",
+        error: validationResults.coverage.error,
+        validationResults
+      }, 400);
+    }
+
+    const result = await executeSPV2(
+      "SMI.USP_InsertClaims", 
+      [],
       [{ name: 'ClaimNumber', type: "VarChar" }]
     );
     
     return c.json({ 
       success: true, 
       message: "Claim submitted successfully", 
-      claimNumber: result.output.ClaimNumber
+      claimNumber: result.output.ClaimNumber,
+      validationResults
     });
   } catch (err) {
-    console.error("Error submitting claim:", err);
+    console.error("Error processing claim:", err);
     return c.json({
       success: false,
-      message: "Failed to submit claim",
+      message: "Failed to process claim",
       error: err.message,
-      stackTrace: err.stack
+      stackTrace: err.stack,
+      validationResults: validationResults || 'Validation did not complete'
     }, 500);
   }
 });
 
-// New endpoint to test database connectivity
 app.get('/test-db-connection', async (c) => {
   let pool;
   try {
@@ -83,7 +132,6 @@ app.get('/test-db-connection', async (c) => {
     
     pool = await sql.connect(dbConfig);
     
-    // Simple query to test connectivity
     await pool.request().query('SELECT 1 as connectionTest');
     
     return c.json({
@@ -118,7 +166,6 @@ app.post('/', async (c) => {
   try {
     const userData = await c.req.json();
 
-    // Make sure all required parameters for the SP are provided
     const result = await executeSPV2("sp_InsertUser", [
       { name: 'Username', type: "VarChar", value: userData.username || "Julien" },
       { name: 'Email', type: "VarChar", value: userData.email || "example@example.com" },

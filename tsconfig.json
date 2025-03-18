@@ -1,10 +1,15 @@
 {
   "compilerOptions": {
-    "module": "commonjs",
+    "module": "NodeNext",
     "target": "es6",
     "outDir": "dist",
     "rootDir": ".",
     "sourceMap": true,
-    "strict": false
-  }
+    "strict": false,
+    "moduleResolution": "NodeNext",
+    "esModuleInterop": true,
+    "typeRoots": ["./typings", "custom.d.ts"],
+  
+  },
+  "include": ["./typings/**/*", "./src/**/*"]
 }

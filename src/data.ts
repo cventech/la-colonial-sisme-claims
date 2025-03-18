@@ -21,27 +21,6 @@ const dbConfig = {
 };
 
 
-export const validatePolicyNumber = async function (policyNumber: string): Promise<boolean> {
-  let pool: sql.ConnectionPool;
-  try {
-    pool = await sql.connect(dbConfig);
-    const request = pool.request();
-
-    request.input('PolicyNumber', sql.VarChar(50), policyNumber);
-
-    const result = await request.execute('SMI.USP_ValidatePolicyNumber');
-
-    return result.recordset[0].IsValid;
-  } catch (err) {
-    console.error("Database error:", err);
-    throw err;
-  } finally {
-    pool?.close();
-  }
-}
-
-
-
 export const executeSPV2 = async function (
   spName: string, 
   params: any[] = [], 
@@ -231,4 +210,172 @@ export const executeStoredProcedure = async function (
   }
 }
 
-export default { executeSPV2, executeStoredProcedure };
+/**
+ * Validates policy information
+ * @param policyNumber The policy number to validate
+ * @param serviceDate The service date for validation
+ * @returns Validation result
+ */
+export const validatePolicy = async function(policyNumber: string, serviceDate: string): Promise<any> {
+  let pool: sql.ConnectionPool;
+  try {
+    pool = await sql.connect(dbConfig);
+    const request = pool.request();
+    
+    // Add parameters according to the stored procedure definition
+    request.input('PolicyNumber', sql.Char(12), policyNumber);
+    request.input('ServiceDate', sql.DateTime, new Date(serviceDate));
+    
+    // Execute the validation stored procedure
+    const result = await request.execute('SMI.USP_SMI_ValidationsPolicy');
+    
+    return {
+      success: true,
+      recordset: result.recordset,
+      output: result.output
+    };
+  } catch (err) {
+    console.error("Policy validation error:", err);
+    return {
+      success: false,
+      error: err.message
+    };
+  } finally {
+    pool?.close();
+  }
+};
+
+/**
+ * Validates plan information
+ * @param policyNumber The policy number to validate
+ * @param serviceDate The service date for validation
+ * @param planCode The plan code to validate
+ * @returns Validation result
+ */
+export const validatePlan = async function(
+  policyNumber: string, 
+  serviceDate: string, 
+  planCode: number
+): Promise<any> {
+  let pool: sql.ConnectionPool;
+  try {
+    pool = await sql.connect(dbConfig);
+    const request = pool.request();
+    
+    // Add parameters according to the stored procedure definition
+    request.input('PolicyNumber', sql.Char(12), policyNumber);
+    request.input('ServiceDate', sql.DateTime, new Date(serviceDate));
+    request.input('PlanCode', sql.SmallInt, planCode);
+    
+    // Execute the validation stored procedure
+    const result = await request.execute('SMI.USP_SMI_ValidationsPlan');
+    
+    return {
+      success: true,
+      recordset: result.recordset,
+      output: result.output
+    };
+  } catch (err) {
+    console.error("Plan validation error:", err);
+    return {
+      success: false,
+      error: err.message
+    };
+  } finally {
+    pool?.close();
+  }
+};
+
+/**
+ * Validates insured person information
+ * @param policyNumber The policy number to validate
+ * @param serviceDate The service date for validation
+ * @param insured The insured number to validate
+ * @returns Validation result
+ */
+export const validateInsured = async function(
+  policyNumber: string, 
+  serviceDate: string, 
+  insured: number
+): Promise<any> {
+  let pool: sql.ConnectionPool;
+  try {
+    pool = await sql.connect(dbConfig);
+    const request = pool.request();
+    
+    // Add parameters according to the stored procedure definition
+    request.input('PolicyNumber', sql.Char(12), policyNumber);
+    request.input('ServiceDate', sql.DateTime, new Date(serviceDate));
+    request.input('Insured', sql.SmallInt, insured);
+    
+    // Execute the validation stored procedure
+    const result = await request.execute('SMI.USP_SMI_ValidationsInsured');
+    
+    return {
+      success: true,
+      recordset: result.recordset,
+      output: result.output
+    };
+  } catch (err) {
+    console.error("Insured validation error:", err);
+    return {
+      success: false,
+      error: err.message
+    };
+  } finally {
+    pool?.close();
+  }
+};
+
+/**
+ * Validates coverage group information
+ * @param policyNumber The policy number to validate
+ * @param planCode The plan code to validate
+ * @param service The service code to validate
+ * @param serviceDate The service date for validation
+ * @returns Validation result
+ */
+export const validateCoveragesGroup = async function(
+  policyNumber: string, 
+  planCode: number,
+  service: number,
+  serviceDate: string
+): Promise<any> {
+  let pool: sql.ConnectionPool;
+  try {
+    pool = await sql.connect(dbConfig);
+    const request = pool.request();
+    
+    // Add parameters according to the stored procedure definition
+    request.input('PolicyNumber', sql.Char(12), policyNumber);
+    request.input('PlanCode', sql.SmallInt, planCode);
+    request.input('Service', sql.SmallInt, service);
+    request.input('ServiceDate', sql.DateTime, new Date(serviceDate));
+    
+    // Execute the validation stored procedure
+    const result = await request.execute('SMI.USP_SMI_ValidationsCoveragesGroup');
+    
+    return {
+      success: true,
+      recordset: result.recordset,
+      output: result.output
+    };
+  } catch (err) {
+    console.error("Coverage group validation error:", err);
+    return {
+      success: false,
+      error: err.message
+    };
+  } finally {
+    pool?.close();
+  }
+};
+
+export default { 
+  executeSPV2, 
+  executeStoredProcedure,
+  validatePolicy,
+  validatePlan,
+  validateInsured,
+  validateCoveragesGroup
+};
