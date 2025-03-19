@@ -51,24 +51,27 @@ export const executeSPV2 = async function (
     tvp.columns.add('ClaimsTr_DiagnosticCode', sql.VarChar(20));
 
     // Add row with provided values
-    tvp.rows.add(
-      '121810000340',   // Claims_PolicyNumber
-      '2024-09-14',     // Claims_EffectiveDate
-      2,                // Claims_Insured
-      0,                // Claims_Dependent
-      'Junior Reyes',   // Claims_CUser
-      1,                // Claims_ProducerCode
-      '31',             // ClaimsTr_GCoverage
-      '23',             // ClaimsTr_Coverage
-      '24018',          // ClaimsTr_ServiceCode
-      '2024-09-14',     // ClaimsTr_ServiceDate
-      '87033',          // ClaimsTr_ProviderCode
-      1,                // ClaimsTr_BeneficiaryType
-      1,                // ClaimsTr_BeneficiaryCode
-      3000,             // ClaimsTr_BilledAmount
-      81,               // ClaimsTr_CCurrency
-      '13690'           // ClaimsTr_DiagnosticCode
-    );
+    // Add row using the provided parameters
+    if (params) {
+      tvp.rows.add(
+        params.find(p => p.name === 'Claims_PolicyNumber')?.value,
+        params.find(p => p.name === 'Claims_EffectiveDate')?.value,
+        params.find(p => p.name === 'Claims_Insured')?.value,
+        params.find(p => p.name === 'Claims_Dependent')?.value,
+        params.find(p => p.name === 'Claims_CUser')?.value,
+        params.find(p => p.name === 'Claims_ProducerCode')?.value, 
+        params.find(p => p.name === 'ClaimsTr_GCoverage')?.value,
+        params.find(p => p.name === 'ClaimsTr_Coverage')?.value,
+        params.find(p => p.name === 'ClaimsTr_ServiceCode')?.value,
+        params.find(p => p.name === 'ClaimsTr_ServiceDate')?.value,
+        params.find(p => p.name === 'ClaimsTr_ProviderCode')?.value,
+        params.find(p => p.name === 'ClaimsTr_BeneficiaryType')?.value,
+        params.find(p => p.name === 'ClaimsTr_BeneficiaryCode')?.value,
+        params.find(p => p.name === 'ClaimsTr_BilledAmount')?.value,
+        params.find(p => p.name === 'ClaimsTr_CCurrency')?.value,
+        params.find(p => p.name === 'ClaimsTr_DiagnosticCode')?.value
+      );
+    }
 
     request.input('Claims_Claimstransactions', tvp);
     
@@ -339,7 +342,8 @@ export const validateCoveragesGroup = async function(
   policyNumber: string, 
   planCode: number,
   service: number,
-  serviceDate: string
+  serviceDate: string,
+  coverageCode: string
 ): Promise<any> {
   let pool: sql.ConnectionPool;
   try {
@@ -351,7 +355,7 @@ export const validateCoveragesGroup = async function(
     request.input('PlanCode', sql.SmallInt, planCode);
     request.input('Service', sql.SmallInt, service);
     request.input('ServiceDate', sql.DateTime, new Date(serviceDate));
-    
+    request.input('GCoverageCode', sql.SmallInt, coverageCode);
     // Execute the validation stored procedure
     const result = await request.execute('SMI.USP_SMI_ValidationsCoveragesGroup');
     
