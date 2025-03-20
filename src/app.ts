@@ -1,91 +1,30 @@
 import { Hono } from "hono";
-import { executeSPV2, executeStoredProcedure, validatePolicy, validatePlan, validateInsured, validateCoveragesGroup } from "./data";
+import { insertClaim } from "./data";
 import * as sql from 'mssql';
 import * as dotenv from 'dotenv';
-import { DynamicsOperations } from './shared/operations';
+import { validateClaimData, ValidationResults } from "./helpers/validateClaimData";
+dotenv.config();
 
 const app = new Hono();
-
-app.get('/', (c) => c.text('Hello Azure Functions!'))
-
-// Define interfaces for validation results
-interface ValidationResult {
-  success: boolean;
-  error?: string;
-  recordset?: any[];
-  output?: any;
-}
-
-interface ValidationResults {
-  policy: ValidationResult;
-  plan: ValidationResult;
-  insured: ValidationResult;
-  coverage: ValidationResult;
-}
-
-dotenv.config();
 
 app.post('/claims', async (c) => {
   let validationResults: ValidationResults;
   try {
     const claimData = await c.req.json();
     
-    const policyNumber = claimData.Claims_PolicyNumber;
-    const serviceDate = claimData.ClaimsTr_ServiceDate;
-    const insured = claimData.Claims_Insured;
-    const planCode = claimData.ClaimsTr_Plan; 
-    const service = parseInt(claimData.ClaimsTr_ServiceCode);
-    const coverageCode = claimData.ClaimsTr_GCoverage;
-
-    // Store all validation results
-    validationResults = {
-      policy: await validatePolicy(policyNumber, serviceDate),
-      plan: planCode ? await validatePlan(policyNumber, serviceDate, planCode) : 
-        { success: false, error: 'Plan validation skipped - no plan code provided' },
-      insured: await validateInsured(policyNumber, serviceDate, insured),
-      coverage: (planCode && service) ? 
-        await validateCoveragesGroup(policyNumber, planCode, service, serviceDate, coverageCode) : 
-        { success: false, error: 'Coverage validation skipped - missing plan code or service' }
-    };
-
-    // Check if any validation failed
-    if (!validationResults.policy.success) {
-      return c.json({
-        success: false,
-        message: "Policy validation failed",
-        error: validationResults.policy.error,
-        validationResults
-      }, 400);
-    }
+    const validation = await validateClaimData(claimData);
+    validationResults = validation.validationResults;
     
-    if (planCode && !validationResults.plan.success) {
+    if (!validation.isValid) {
       return c.json({
         success: false,
-        message: "Plan validation failed",
-        error: validationResults.plan.error,
+        message: validation.errorMessage,
+        error: validation.error,
         validationResults
-      }, 400);
-    }
-    
-    if (!validationResults.insured.success) {
-      return c.json({
-        success: false,
-        message: "Insured validation failed",
-        error: validationResults.insured.error,
-        validationResults
-      }, 400);
+      }, validation.errorCode || 400 as any);
     }
 
-    if (planCode && service && !validationResults.coverage.success) {
-      return c.json({
-        success: false,
-        message: "Coverage validation failed",
-        error: validationResults.coverage.error,
-        validationResults
-      }, 400);
-    }
-
-    const result = await executeSPV2(
+    const result = await insertClaim(
       "SMI.USP_InsertClaims", 
       [
         { name: 'Claims_PolicyNumber', type: "VarChar", value: claimData.Claims_PolicyNumber },
@@ -184,25 +123,5 @@ app.get('/test-db-connection', async (c) => {
     }
   }
 });
-
-app.post('/', async (c) => {
-  try {
-    const userData = await c.req.json();
-
-    const result = await executeSPV2("sp_InsertUser", [
-      { name: 'Username', type: "VarChar", value: userData.username || "Julien" },
-      { name: 'Email', type: "VarChar", value: userData.email || "example@example.com" },
-      { name: 'PasswordHash', type: "VarChar", value: userData.passwordHash || "hashedpassword" },
-      { name: 'FirstName', type: "VarChar", value: userData.firstName || "Default" },
-      { name: 'LastName', type: "VarChar", value: userData.lastName || "User" }
-    ]);
-
-    return c.json({ message: "User inserted successfully!" });
-  } catch (err) {
-    console.error("Error:", err);
-    return c.json({ error: `Error: ${err.message}` }, 500)
-  }
-})
-
 
 export default app;

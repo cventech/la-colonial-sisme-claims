@@ -21,7 +21,7 @@ const dbConfig = {
 };
 
 
-export const executeSPV2 = async function (
+export const insertClaim = async function (
   spName: string, 
   params: any[] = [], 
   outputParams: any[] = []
@@ -98,116 +98,6 @@ export const executeSPV2 = async function (
   } catch (err) {
     console.error("Database error:", err);
     throw err; // Make sure to throw the error so it can be caught by the caller
-  } finally {
-    pool?.close();
-  }
-}
-
-export const executeStoredProcedure = async function (
-  spName: string, 
-  params: any[] = [], 
-  outputParams: any[] = []
-): Promise<any> {
-  let pool: sql.ConnectionPool;
-  try {
-    pool = await sql.connect(dbConfig);
-    const request = pool.request();
-
-    // Add input parameters
-    params.forEach(({ name, type, value }) => {
-      // Special handling for table-valued parameters
-      if (type === 'TVP') {
-        // Create a table object for the TVP
-        const tvp = new sql.Table();
-        
-        // Define the table structure based on the first row of data (assuming it's an array of objects)
-        if (Array.isArray(value) && value.length > 0) {
-          // Extract the column names from the first object
-          const firstRow = value[0];
-          
-          // Add columns to the table definition
-          Object.keys(firstRow).forEach(key => {
-            // Try to determine the SQL type based on JavaScript type
-            const jsValue = firstRow[key];
-            let sqlType;
-            
-            if (typeof jsValue === 'number') {
-              if (Number.isInteger(jsValue)) {
-                tvp.columns.add(key, sql.Int);
-              } else {
-                tvp.columns.add(key, sql.Decimal(18, 2));
-              }
-            } else if (typeof jsValue === 'string') {
-              // Check if it's a date
-              if (!isNaN(Date.parse(jsValue))) {
-                tvp.columns.add(key, sql.DateTime);
-              } else {
-                tvp.columns.add(key, sql.NVarChar(255));
-              }
-            } else if (typeof jsValue === 'boolean') {
-              tvp.columns.add(key, sql.Bit);
-            } else {
-              // Default to NVarChar for other types
-              tvp.columns.add(key, sql.NVarChar(255));
-            }
-          });
-          
-          // Add rows to the table
-          value.forEach(row => {
-            tvp.rows.add(...Object.values(row));
-          });
-        }
-        
-        // Add the TVP as a parameter
-        request.input(name, tvp);
-      } else if (type === 'VarChar' || type === 'NVarChar') {
-        let length = 4000; // Default max length for SQL Server
-        
-        // Set specific lengths based on parameter names if needed
-        if (name === 'Username' || name === 'FirstName' || name === 'LastName') {
-          length = 50;
-        } else if (name === 'Email') {
-          length = 100;
-        } else if (name === 'PasswordHash') {
-          length = 255;
-        } else if (name === 'Claims_Claimstransactions') {
-          // For JSON data, use max length to ensure it fits
-          length = sql.MAX;
-        }
-        
-        if (type === 'VarChar') {
-          request.input(name, sql.VarChar(length), value);
-        } else {
-          request.input(name, sql.NVarChar(length), value);
-        }
-      } else {
-        request.input(name, sql[type], value);
-      }
-    });
-
-    // Add output parameters
-    outputParams.forEach(({ name, type }) => {
-      if (type === 'VarChar') {
-        request.output(name, sql.VarChar(255));
-      } else if (type === 'NVarChar') {
-        request.output(name, sql.NVarChar(255));
-      } else if (type === 'Int') {
-        request.output(name, sql.Int);
-      } else {
-        request.output(name, sql[type]);
-      }
-    });
-
-    const result = await request.execute(spName);
-    
-    // Return both recordset and output parameters
-    return {
-      recordset: result.recordset,
-      output: result.output
-    };
-  } catch (err) {
-    console.error("Database error:", err);
-    throw err;
   } finally {
     pool?.close();
   }
@@ -376,8 +266,7 @@ export const validateCoveragesGroup = async function(
 };
 
 export default { 
-  executeSPV2, 
-  executeStoredProcedure,
+  insertClaim, 
   validatePolicy,
   validatePlan,
   validateInsured,
