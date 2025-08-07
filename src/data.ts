@@ -3,18 +3,21 @@ import * as dotenv from 'dotenv'
 
 dotenv.config();
 
+
 const dbConfig = {
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
   server: process.env.DB_SERVER,
   database: process.env.DB_NAME,
   port: parseInt(process.env.DB_PORT),
+  connectionTimeout: 50000,
+  requestTimeout: 50000,
   authentication: {
     type: 'default',
   },
   options: {
-    encrypt: false,
-    trustServerCertificate: false,
+    encrypt: true,
+    trustServerCertificate: true,
     applicationIntent: 'ReadWrite',
     multiSubnetFailover: false
   }
@@ -49,6 +52,8 @@ export const insertClaim = async function (
     tvp.columns.add('ClaimsTr_BilledAmount', sql.Int);
     tvp.columns.add('ClaimsTr_CCurrency', sql.Int);
     tvp.columns.add('ClaimsTr_DiagnosticCode', sql.VarChar(20));
+    tvp.columns.add('TicketNumber', sql.NVarChar(100));
+    tvp.columns.add('IncidentID', sql.UniqueIdentifier);
 
     // Add row with provided values
     // Add row using the provided parameters
@@ -69,7 +74,9 @@ export const insertClaim = async function (
         params.find(p => p.name === 'ClaimsTr_BeneficiaryCode')?.value,
         params.find(p => p.name === 'ClaimsTr_BilledAmount')?.value,
         params.find(p => p.name === 'ClaimsTr_CCurrency')?.value,
-        params.find(p => p.name === 'ClaimsTr_DiagnosticCode')?.value
+        params.find(p => p.name === 'ClaimsTr_DiagnosticCode')?.value,
+        params.find(p => p.name === 'TicketNumber')?.value,
+        params.find(p => p.name === 'IncidentID')?.value
       );
     }
 
@@ -98,6 +105,64 @@ export const insertClaim = async function (
   } catch (err) {
     console.error("Database error:", err);
     throw err; // Make sure to throw the error so it can be caught by the caller
+  } finally {
+    pool?.close();
+  }
+}
+
+export const insertCase = async function (
+  spName: string, 
+  params: any[] = [], 
+  outputParams: any[] = []
+): Promise<any> {
+  let pool: sql.ConnectionPool;
+  try {
+    pool = await sql.connect(dbConfig);
+    const request = pool.request();
+
+    // Add input parameters for case creation
+    params.forEach(({ name, type, value }) => {
+      if (type === 'VarChar') {
+        request.input(name, sql.VarChar(255), value);
+      } else if (type === 'Char') {
+        request.input(name, sql.Char(255), value);
+      } else if (type === 'TinyInt') {
+        request.input(name, sql.TinyInt, value);
+      } else if (type === 'SmallInt') {
+        request.input(name, sql.SmallInt, value);
+      } else if (type === 'Int') {
+        request.input(name, sql.Int, value);
+      } else if (type === 'DateTime') {
+        request.input(name, sql.DateTime, value ? new Date(value) : null);
+      } else if (type === 'Bit') {
+        request.input(name, sql.Bit, value);
+      } else {
+        request.input(name, sql[type], value);
+      }
+    });
+    
+    // Add output parameters
+    outputParams.forEach(({ name, type }) => {
+      if (type === 'VarChar') {
+        request.output(name, sql.VarChar(255));
+      } else if (type === 'NVarChar') {
+        request.output(name, sql.NVarChar(255));
+      } else if (type === 'Int') {
+        request.output(name, sql.Int);
+      } else {
+        request.output(name, sql[type]);
+      }
+    });
+
+    const result = await request.execute(spName);
+
+    return {
+      recordset: result.recordset,
+      output: result.output
+    };
+  } catch (err) {
+    console.error("Database error:", err);
+    throw err;
   } finally {
     pool?.close();
   }
@@ -245,7 +310,7 @@ export const validateCoveragesGroup = async function(
     request.input('PlanCode', sql.SmallInt, planCode);
     request.input('Service', sql.SmallInt, service);
     request.input('ServiceDate', sql.DateTime, new Date(serviceDate));
-    request.input('GCoverageCode', sql.SmallInt, coverageCode);
+    // request.input('GCoverageCode', sql.SmallInt, coverageCode);
     // Execute the validation stored procedure
     const result = await request.execute('SMI.USP_SMI_ValidationsCoveragesGroup');
     
@@ -266,7 +331,8 @@ export const validateCoveragesGroup = async function(
 };
 
 export default { 
-  insertClaim, 
+  insertClaim,
+  insertCase,
   validatePolicy,
   validatePlan,
   validateInsured,
