@@ -1,5 +1,10 @@
 import { Hono } from "hono";
-import { insertClaim, insertCase } from "./data";
+import {
+  insertClaim,
+  insertCase,
+  getWorkFlowControlPoolSuscription,
+} from "./data";
+import { smiDbConfig, comercialDbConfig } from "./data/config";
 import * as sql from "mssql";
 import * as dotenv from "dotenv";
 import {
@@ -40,7 +45,9 @@ app.post("/claims", async (c) => {
         {
           name: "Claims_PolicyNumber",
           type: "VarChar",
-          value: claimData.Claims_PolicyNumber,
+          value:
+            claimData.Claims_PolicyNumber?.replace(/-/g, "") ||
+            claimData.Claims_PolicyNumber,
         },
         {
           name: "Claims_EffectiveDate",
@@ -159,7 +166,7 @@ app.post("/cases", async (c) => {
     const caseData = await c.req.json();
 
     const result = await insertCase(
-      "SMI.USP_InsertCase",
+      "[FTC].USP_InsertWorkFlowControl",
       [
         { name: "BranchCode", type: "SmallInt", value: caseData.BranchCode },
         {
@@ -167,8 +174,8 @@ app.post("/cases", async (c) => {
           type: "DateTime",
           value: caseData.ChangeEffectiveDate,
         },
-        { name: "Changes", type: "Int", value: caseData.Changes },
-        { name: "CompanyCode", type: "TinyInt", value: 1 },
+        { name: "ChangeType", type: "Int", value: caseData.ChangeType },
+        { name: "CompanyCode", type: "TinyInt", value: caseData.CompanyCode },
         {
           name: "ConditionCode",
           type: "TinyInt",
@@ -179,8 +186,18 @@ app.post("/cases", async (c) => {
           type: "TinyInt",
           value: caseData.FullDocumentation,
         },
-        { name: "IDNumber", type: "VarChar", value: caseData.IDNumber },
-        { name: "InsuredType", type: "SmallInt", value: caseData.InsuredType },
+        {
+          name: "IDNumber",
+          type: "VarChar",
+          value: caseData.IDNumber?.replace(/-/g, "") || caseData.IDNumber,
+        },
+        {
+          name: "InsuranceType",
+          type: "SmallInt",
+          value: caseData.InsuranceType,
+        },
+        { name: "InsuredCode", type: "Int", value: caseData.InsuredCode },
+        { name: "Name1", type: "VarChar", value: caseData.Name1 },
         { name: "Name2", type: "VarChar", value: caseData.Name2 },
         { name: "Observations", type: "VarChar", value: caseData.Observations },
         { name: "OfficeCode", type: "SmallInt", value: caseData.OfficeCode },
@@ -189,7 +206,18 @@ app.post("/cases", async (c) => {
           type: "DateTime",
           value: caseData.OfficeReceptionDate,
         },
-        { name: "PolicyNumber", type: "Char", value: caseData.PolicyNumber },
+        // {
+        //   name: "AssignedDate",
+        //   type: "DateTime",
+        //   value: caseData.AssignedDate,
+        // },
+        {
+          name: "PolicyNumber",
+          type: "Char",
+          value:
+            caseData.PolicyNumber?.replace(/-/g, "") || caseData.PolicyNumber,
+        },
+        { name: "Premium", type: "Money", value: caseData.Premium },
         {
           name: "ReceptionDate",
           type: "DateTime",
@@ -200,17 +228,22 @@ app.post("/cases", async (c) => {
           type: "VarChar",
           value: "0",
         },
-        { name: "SLOB", type: "TinyInt", value: caseData.SLOB },
-        { name: "UnitsWork", type: "SmallInt", value: 1 },
-        { name: "Express", type: "Bit", value: caseData.Express },
+        { name: "SLOB", type: "Int", value: caseData.SLOB },
+        { name: "UnitsToWork", type: "SmallInt", value: caseData.UnitsWork },
+        { name: "isExpress", type: "Bit", value: caseData.Express },
+        { name: "User", type: "VarChar", value: caseData.User },
+        { name: "User2", type: "VarChar", value: caseData.User2 },
+
+        { name: "ProducerNumber", type: "Int", value: caseData.ProducerNumber },
+        { name: "CaseNumber", type: "Int", value: caseData.CaseNumber },
       ],
-      [{ name: "CaseNumber", type: "VarChar" }], // Parámetro de salida
+      [{ name: "WorkNumber", type: "VarChar" }], // Parámetro de salida
     );
 
     return c.json({
       success: true,
       message: "Case created successfully",
-      caseNumber: result.output.CaseNumber,
+      caseNumber: result.output.WorkNumber,
     });
   } catch (err) {
     console.error("Error creating case:", err);
@@ -226,61 +259,108 @@ app.post("/cases", async (c) => {
   }
 });
 
-app.get("/test-db-connection", async (c) => {
-  let pool;
+app.post("/assign-workload", async (c) => {
   try {
-    const dbConfig = {
-      user: process.env.DB_USER,
-      password: process.env.DB_PASSWORD,
-      server: process.env.DB_SERVER,
-      database: process.env.DB_NAME,
-      port: parseInt(process.env.DB_PORT),
-      connectionTimeout: 50000,
-      requestTimeout: 50000,
-      authentication: {
-        type: "default",
-      },
-      options: {
-        encrypt: true,
-        trustServerCertificate: true,
-        applicationIntent: "ReadWrite",
-        multiSubnetFailover: false,
-      },
-    };
+    const requestData = await c.req.json();
 
-    pool = await sql.connect(dbConfig);
+    const { BranchCode, InsuredCode, Premium, InsuranceAmount } = requestData;
 
-    await pool.request().query("SELECT 1 as connectionTest");
+    if (
+      !BranchCode ||
+      !InsuredCode ||
+      Premium === undefined ||
+      InsuranceAmount === undefined
+    ) {
+      return c.json(
+        {
+          success: false,
+          message:
+            "Missing required parameters: BranchCode, InsuredCode, Premium, InsuranceAmount",
+        },
+        400,
+      );
+    }
+
+    const result = await getWorkFlowControlPoolSuscription(
+      BranchCode,
+      InsuredCode,
+      Premium,
+      InsuranceAmount,
+    );
+
+    if (!result.success) {
+      return c.json(
+        {
+          success: false,
+          message: "Failed to assign workload",
+          error: result.error,
+        },
+        500,
+      );
+    }
 
     return c.json({
       success: true,
-      message: "Database connection successful",
-      connection: {
-        server: process.env.DB_SERVER,
-        database: process.env.DB_NAME,
-        user: process.env.DB_USER,
-      },
+      message: "Workload assignment completed successfully",
+      assignedTo: result.output.AssignedTo,
+      data: result.recordset,
     });
   } catch (err) {
-    console.error("Database connection error:", err);
+    console.error("Error assigning workload:", err);
     return c.json(
       {
         success: false,
-        message: "Database connection failed",
+        message: "Failed to assign workload",
         error: err.message,
-        connection: {
-          server: process.env.DB_SERVER,
-          database: process.env.DB_NAME,
-          user: process.env.DB_USER,
-        },
+        stackTrace: err.stack,
       },
       500,
     );
-  } finally {
-    if (pool) {
-      await pool.close();
-    }
   }
+});
+
+app.get("/test-db-connection", async (c) => {
+  const testConnection = async (name: string, config: any) => {
+    let pool: sql.ConnectionPool;
+    try {
+      pool = await sql.connect(config);
+      await pool.request().query("SELECT 1 as connectionTest");
+      return {
+        success: true,
+        database: config.database,
+        server: config.server,
+      };
+    } catch (err) {
+      return {
+        success: false,
+        database: config.database,
+        server: config.server,
+        error: err.message,
+      };
+    } finally {
+      pool?.close();
+    }
+  };
+
+  const [smi, comercial] = await Promise.allSettled([
+    testConnection("smi", smiDbConfig),
+    testConnection("comercial", comercialDbConfig),
+  ]);
+
+  const smiResult = smi.status === "fulfilled" ? smi.value : { success: false, error: smi.reason?.message };
+  const comercialResult = comercial.status === "fulfilled" ? comercial.value : { success: false, error: comercial.reason?.message };
+  const allHealthy = smiResult.success && comercialResult.success;
+
+  return c.json(
+    {
+      success: allHealthy,
+      connections: {
+        smi: smiResult,
+        comercial: comercialResult,
+      },
+    },
+    allHealthy ? 200 : 500,
+  );
 });
 
 export default app;
