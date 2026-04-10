@@ -1,0 +1,88 @@
+version: "3"
+
+tasks:
+  install:
+    desc: Install npm dependencies
+    cmds:
+      - npm install
+    sources:
+      - package.json
+    generates:
+      - node_modules/.package-lock.json
+
+  clean:
+    desc: Remove the dist directory
+    cmds:
+      - npm run clean
+
+  build:
+    desc: Compile TypeScript
+    deps: [clean]
+    cmds:
+      - npm run build
+
+  watch:
+    desc: Compile TypeScript in watch mode
+    deps: [install, clean]
+    cmds:
+      - npm run watch
+
+  start:
+    desc: Build and start Azure Functions locally
+    deps: [install]
+    cmds:
+      - npm run start
+
+  debug:
+    desc: Start Azure Functions with Node.js inspector on port 9229
+    deps: [build]
+    cmds:
+      - func start --inspect 9229
+
+  dev:
+    desc: Run TypeScript watch + Azure Functions host concurrently
+    deps: [install, clean]
+    cmds:
+      - npm run watch &
+      - sleep 3
+      - func start
+
+  dev:debug:
+    desc: Run TypeScript watch + Azure Functions host with debugger
+    deps: [install, clean]
+    cmds:
+      - npm run watch &
+      - sleep 3
+      - func start --inspect 9229
+
+  prune:
+    desc: Prune dev dependencies for production
+    deps: [build]
+    cmds:
+      - npm prune --production
+
+  deploy:
+    desc: Build and deploy to Azure Functions (production)
+    deps: [build]
+    vars:
+      FUNC_APP_NAME: '{{.FUNC_APP_NAME | default "lacolonial-claimssmi-insert-crm1"}}'
+    cmds:
+      - func azure functionapp publish {{.FUNC_APP_NAME}} --nozip
+
+  deploy:qa:
+    desc: Deploy to QA slot
+    deps: [build]
+    vars:
+      FUNC_APP_NAME: '{{.FUNC_APP_NAME | default "lacolonial-claimssmi-insert-crm1"}}'
+    cmds:
+      - func azure functionapp publish {{.FUNC_APP_NAME}} --slot qa --nozip
+
+  deploy:slot:
+    desc: Deploy to a specific deployment slot
+    deps: [build]
+    requires:
+      vars: [SLOT_NAME]
+    vars:
+      FUNC_APP_NAME: '{{.FUNC_APP_NAME | default "lacolonial-claimssmi-insert-crm1"}}'
+    cmds:
+      - func azure functionapp publish {{.FUNC_APP_NAME}} --slot {{.SLOT_NAME}} --nozip
