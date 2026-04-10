@@ -31,6 +31,7 @@ export const insertClaim = async function (
     tvp.columns.add("ClaimsTr_DiagnosticCode", sql.VarChar(20));
     tvp.columns.add("TicketNumber", sql.NVarChar(100));
     tvp.columns.add("IncidentID", sql.UniqueIdentifier);
+    tvp.columns.add("ClaimNumber", sql.Int);
 
     // Add row using the provided parameters
     if (params) {
@@ -53,6 +54,7 @@ export const insertClaim = async function (
         params.find((p) => p.name === "ClaimsTr_DiagnosticCode")?.value,
         params.find((p) => p.name === "TicketNumber")?.value,
         params.find((p) => p.name === "IncidentID")?.value,
+        params.find((p) => p.name === "ClaimNumber")?.value,
       );
     }
 
@@ -79,6 +81,7 @@ export const insertClaim = async function (
     };
   } catch (err) {
     console.error("Database error:", err);
+    err.message = `[${smiDbConfig.server}/${smiDbConfig.database}] ${err.message}`;
     throw err;
   } finally {
     pool?.close();
@@ -108,7 +111,7 @@ export const validatePolicy = async function (
     console.error("Policy validation error:", err);
     return {
       success: false,
-      error: err.message,
+      error: `[${smiDbConfig.server}/${smiDbConfig.database}] ${err.message}`,
     };
   } finally {
     pool?.close();
@@ -140,7 +143,7 @@ export const validatePlan = async function (
     console.error("Plan validation error:", err);
     return {
       success: false,
-      error: err.message,
+      error: `[${smiDbConfig.server}/${smiDbConfig.database}] ${err.message}`,
     };
   } finally {
     pool?.close();
@@ -172,7 +175,7 @@ export const validateInsured = async function (
     console.error("Insured validation error:", err);
     return {
       success: false,
-      error: err.message,
+      error: `[${smiDbConfig.server}/${smiDbConfig.database}] ${err.message}`,
     };
   } finally {
     pool?.close();
@@ -209,7 +212,7 @@ export const validateCoveragesGroup = async function (
     console.error("Coverage group validation error:", err);
     return {
       success: false,
-      error: err.message,
+      error: `[${smiDbConfig.server}/${smiDbConfig.database}] ${err.message}`,
     };
   } finally {
     pool?.close();

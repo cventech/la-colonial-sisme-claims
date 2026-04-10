@@ -120,7 +120,6 @@ app.post("/claims", async (c) => {
           type: "VarChar",
           value: claimData.ClaimsTr_DiagnosticCode,
         },
-        { name: "ClaimsTr_Plan", type: "Int", value: claimData.ClaimsTr_Plan },
         {
           name: "TicketNumber",
           type: "NVarChar",
@@ -130,6 +129,11 @@ app.post("/claims", async (c) => {
           name: "IncidentID",
           type: "UniqueIdentifier",
           value: claimData.IncidentID,
+        },
+        {
+          name: "ClaimNumber",
+          type: "Int",
+          value: claimData.ClaimNumber,
         },
       ],
       [{ name: "ClaimNumber", type: "VarChar" }],
@@ -347,8 +351,14 @@ app.get("/test-db-connection", async (c) => {
     testConnection("comercial", comercialDbConfig),
   ]);
 
-  const smiResult = smi.status === "fulfilled" ? smi.value : { success: false, error: smi.reason?.message };
-  const comercialResult = comercial.status === "fulfilled" ? comercial.value : { success: false, error: comercial.reason?.message };
+  const smiResult =
+    smi.status === "fulfilled"
+      ? smi.value
+      : { success: false, error: smi.reason?.message };
+  const comercialResult =
+    comercial.status === "fulfilled"
+      ? comercial.value
+      : { success: false, error: comercial.reason?.message };
   const allHealthy = smiResult.success && comercialResult.success;
 
   return c.json(

@@ -53,6 +53,7 @@ export const insertCase = async function (
     };
   } catch (err) {
     console.error("Database error:", err);
+    err.message = `[${comercialDbConfig.server}/${comercialDbConfig.database}] ${err.message}`;
     throw err;
   } finally {
     pool?.close();
@@ -90,7 +91,7 @@ export const getWorkFlowControlPoolSuscription = async function (
     console.error("Workflow control pool subscription error:", err);
     return {
       success: false,
-      error: err.message,
+      error: `[${comercialDbConfig.server}/${comercialDbConfig.database}] ${err.message}`,
     };
   } finally {
     pool?.close();
